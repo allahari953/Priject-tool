@@ -28,5 +28,5 @@ A fully working, offline, Trello-style project management app built using *pure 
 
 ### 💾 Auto Save
 - Uses browser *localStorage*  
-- Your data stays safe even after refresh or closing the browser  
+- Your data stays safe even after refresh or closing the browser.  
 
