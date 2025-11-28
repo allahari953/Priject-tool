@@ -1,0 +1,797 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Mini PM - Full Single-File App</title>
+<style>
+  :root{
+    --bg:#0f172a;
+    --card:#0b1220;
+    --muted:#94a3b8;
+    --accent:#6366f1;
+    --glass: rgba(255,255,255,0.04);
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;
+    font-family:Inter,system-ui,Segoe UI,Roboto,"Helvetica Neue",Arial;
+    background:linear-gradient(180deg,#071029 0%, #071b2b 100%);
+    color:#e6eef8;
+    min-height:100vh;
+    display:flex;
+    flex-direction:column;
+  }
+
+  header{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding:14px 20px;
+    border-bottom:1px solid rgba(255,255,255,0.03);
+    gap:12px;
+  }
+  header h1{margin:0;font-size:18px;letter-spacing:0.4px}
+  .controls{display:flex;gap:8px;align-items:center}
+
+  button {
+    background:var(--accent);
+    color:white;
+    border:0;
+    padding:8px 10px;
+    border-radius:8px;
+    cursor:pointer;
+    font-weight:600;
+  }
+  button.ghost{
+    background:transparent;
+    color:var(--muted);
+    border:1px solid rgba(255,255,255,0.03);
+    padding:6px 8px;
+  }
+  input, select, textarea {
+    background:transparent;
+    color:inherit;
+    border:1px solid rgba(255,255,255,0.06);
+    padding:8px;
+    border-radius:8px;
+  }
+
+  main{flex:1; padding:18px; overflow:auto}
+
+  .board-wrap{
+    display:flex;
+    gap:16px;
+    align-items:flex-start;
+    padding-bottom:40px;
+  }
+
+  .board {
+    width:320px;
+    background:var(--card);
+    border-radius:12px;
+    padding:12px;
+    min-height:120px;
+    box-shadow: 0 6px 18px rgba(2,6,23,0.6);
+  }
+  .board h3{margin:0 0 8px 0; font-size:16px}
+  .board .meta{font-size:12px;color:var(--muted); margin-bottom:8px}
+
+  .task {
+    background:var(--glass);
+    padding:10px;
+    border-radius:10px;
+    margin-bottom:10px;
+    cursor:grab;
+    user-select:none;
+    transition:transform .08s ease;
+  }
+  .task:active{cursor:grabbing}
+  .task .title{font-weight:700}
+  .task .small{font-size:12px;color:var(--muted);margin-top:6px}
+
+  .side {
+    width:300px;
+    margin-left:18px;
+  }
+  .layout{
+    display:flex;
+    gap:18px;
+    align-items:flex-start;
+  }
+
+  /* Modal */
+  .modal-backdrop{
+    position:fixed; inset:0; background:rgba(0,0,0,0.6);
+    display:none; align-items:center; justify-content:center; padding:20px; z-index:50;
+  }
+  .modal{
+    width:720px; max-width:100%;
+    background:linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.02));
+    border-radius:12px; padding:18px;
+    box-shadow:0 10px 40px rgba(2,6,23,0.7);
+  }
+  .row{display:flex;gap:8px}
+  .col{flex:1}
+
+  /* Login box */
+  .login-box{
+    max-width:420px;
+    margin:60px auto;
+    padding:18px;
+    border-radius:12px;
+    background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+    box-shadow:0 8px 30px rgba(2,6,23,0.7);
+    text-align:center;
+  }
+
+  .notifications{
+    position:fixed; right:18px; bottom:18px;
+    width:320px; max-height:60vh; overflow:auto; display:flex; flex-direction:column; gap:8px; z-index:60;
+  }
+  .notice{
+    background:rgba(99,102,241,0.12);
+    border-left:3px solid var(--accent);
+    padding:10px;border-radius:8px;color:#dfe6ff;font-size:13px;
+  }
+
+  /* small screens */
+  @media (max-width:900px){
+    .layout{flex-direction:column}
+    .side{width:100%}
+    .board-wrap{flex-wrap:nowrap;overflow:auto;padding-bottom:20px}
+    header{flex-direction:column;align-items:flex-start;gap:10px}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div style="display:flex;gap:12px;align-items:center">
+    <h1>Mini PM — Project Boards</h1>
+    <div style="color:var(--muted); font-size:13px">No backend • Local-only • Real-time in tabs</div>
+  </div>
+
+  <div class="controls">
+    <div id="userDisplay" style="display:flex;align-items:center;gap:8px"></div>
+    <button id="btnNewProject">+ New Project</button>
+    <button id="btnLogout" class="ghost" style="display:none">Logout</button>
+  </div>
+</header>
+
+<main id="mainArea">
+  <!-- login placeholder or board area will be inserted here by JS -->
+</main>
+
+<!-- Modal: Create / Edit Project -->
+<div id="projectModal" class="modal-backdrop" aria-hidden="true">
+  <div class="modal">
+    <h2 id="projectModalTitle">Create Project</h2>
+    <div class="row" style="margin-top:10px">
+      <input id="projName" placeholder="Project name (required)">
+      <input id="projColor" placeholder="Color label (optional)">
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">
+      <button id="projSave">Save</button>
+      <button id="projCancel" class="ghost">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Task details -->
+<div id="taskModal" class="modal-backdrop" aria-hidden="true">
+  <div class="modal">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <h2 id="taskModalTitle">Task</h2>
+      <div><button id="taskDelete" class="ghost">Delete</button></div>
+    </div>
+
+    <div style="margin-top:10px">
+      <input id="taskTitleInput" placeholder="Task title (required)">
+      <textarea id="taskDesc" rows="4" placeholder="Description (optional)" style="margin-top:8px"></textarea>
+
+      <div class="row" style="margin-top:8px">
+        <input id="taskAssignee" placeholder="Assign to (username)">
+        <input id="taskDue" type="date">
+        <select id="taskStatus">
+          <option value="todo">To Do</option>
+          <option value="inprogress">In Progress</option>
+          <option value="done">Done</option>
+        </select>
+      </div>
+
+      <div style="display:flex;gap:8px;align-items:center;margin-top:12px">
+        <input id="commentText" placeholder="Write a comment..." style="flex:1">
+        <button id="addCommentBtn">Comment</button>
+      </div>
+
+      <div id="commentsList" style="margin-top:12px; max-height:180px; overflow:auto"></div>
+
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">
+        <button id="taskSave">Save</button>
+        <button id="taskCancel" class="ghost">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Notifications -->
+<div class="notifications" id="notifications" aria-live="polite"></div>
+
+<script>
+/*
+  Mini PM - Single file app
+  - Data stored in localStorage under key 'miniPM:v1'
+  - Real-time across tabs using BroadcastChannel 'mini-pm-channel'
+*/
+
+// ---------- Utilities ----------
+const STORAGE_KEY = 'miniPM:v1';
+const BC_CHANNEL = 'mini-pm-channel';
+const bc = ('BroadcastChannel' in window) ? new BroadcastChannel(BC_CHANNEL) : null;
+const nowISO = () => new Date().toISOString();
+
+function uid(prefix='id'){ return prefix + '_' + Math.random().toString(36).slice(2,10); }
+
+function saveState(state){
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  // broadcast the update so other tabs can refresh
+  if(bc) bc.postMessage({type:'state:update', ts: Date.now()});
+}
+
+function loadState(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(!raw) return defaultState();
+    return JSON.parse(raw);
+  }catch(e){
+    console.error('Failed to parse state, resetting.', e);
+    return defaultState();
+  }
+}
+function defaultState(){
+  return {
+    users: {},          // username -> { name, createdAt }
+    projects: [],       // { id, name, color, createdAt, tasks: [taskId,...] }
+    tasks: {},          // taskId -> { id, title, desc, assignee, due, status, comments: [{id,author,text,ts}], createdAt, projectId }
+    order: [],          // project order (ids)
+    meta: { updatedAt: nowISO() }
+  };
+}
+
+// ---------- App State ----------
+let state = loadState();
+let currentUser = localStorage.getItem('miniPM:user') || null;
+
+// ---------- UI helpers ----------
+const mainArea = document.getElementById('mainArea');
+const userDisplay = document.getElementById('userDisplay');
+const btnNewProject = document.getElementById('btnNewProject');
+const btnLogout = document.getElementById('btnLogout');
+const notifications = document.getElementById('notifications');
+
+// Modal elements
+const projectModal = document.getElementById('projectModal');
+const projNameInput = document.getElementById('projName');
+const projColorInput = document.getElementById('projColor');
+const projSave = document.getElementById('projSave');
+const projCancel = document.getElementById('projCancel');
+const projectModalTitle = document.getElementById('projectModalTitle');
+
+const taskModal = document.getElementById('taskModal');
+const taskModalTitle = document.getElementById('taskModalTitle');
+const taskTitleInput = document.getElementById('taskTitleInput');
+const taskDesc = document.getElementById('taskDesc');
+const taskAssignee = document.getElementById('taskAssignee');
+const taskDue = document.getElementById('taskDue');
+const taskStatus = document.getElementById('taskStatus');
+const addCommentBtn = document.getElementById('addCommentBtn');
+const commentText = document.getElementById('commentText');
+const commentsList = document.getElementById('commentsList');
+const taskSave = document.getElementById('taskSave');
+const taskCancel = document.getElementById('taskCancel');
+const taskDelete = document.getElementById('taskDelete');
+
+// working variables
+let editingProjectId = null;
+let editingTaskId = null;
+
+// ---------- Init ----------
+renderApp();
+
+if(bc){
+  bc.onmessage = (ev) => {
+    if(ev && ev.data && ev.data.type === 'state:update'){
+      // reload state to reflect remote edits
+      state = loadState();
+      renderBoards();
+      showNotification('Updated from another tab');
+    }
+  };
+}
+
+// ---------- Auth UI & Flow ----------
+function showLogin(){
+  mainArea.innerHTML = '';
+  btnLogout.style.display = 'none';
+  userDisplay.innerHTML = '';
+
+  const loginBox = document.createElement('div');
+  loginBox.className = 'login-box';
+  loginBox.innerHTML = `
+    <h2>Welcome to Mini PM</h2>
+    <p style="color:var(--muted)">Enter a username to sign in. This app stores data locally.</p>
+    <div style="display:flex;gap:8px;margin-top:12px;justify-content:center">
+      <input id="loginUser" placeholder="username" style="min-width:180px">
+      <button id="loginBtn">Sign in</button>
+    </div>
+    <p style="color:var(--muted);font-size:13px;margin-top:10px">Tip: use same username across tabs to appear as same user</p>
+  `;
+  mainArea.appendChild(loginBox);
+
+  document.getElementById('loginBtn').onclick = () => {
+    const v = document.getElementById('loginUser').value.trim();
+    if(!v){ alert('Please enter username'); return; }
+    currentUser = v;
+    localStorage.setItem('miniPM:user', currentUser);
+    if(!state.users[v]) state.users[v] = { name: v, createdAt: nowISO() };
+    saveState(state);
+    renderApp();
+    showNotification('Signed in as ' + v);
+  };
+}
+
+function renderUserControls(){
+  userDisplay.innerHTML = '';
+  if(currentUser){
+    const span = document.createElement('div');
+    span.style.display='flex';
+    span.style.alignItems='center';
+    span.style.gap='8px';
+    span.innerHTML = `<div style="background:linear-gradient(90deg,#334155,#0ea5a4);width:36px;height:36px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-weight:700">${(currentUser[0]||'U').toUpperCase()}</div>
+      <div style="display:flex;flex-direction:column;align-items:flex-start">
+        <div style="font-weight:700">${currentUser}</div>
+        <div style="font-size:12px;color:var(--muted)">Local account</div>
+      </div>`;
+    userDisplay.appendChild(span);
+    btnLogout.style.display = 'inline-block';
+  } else {
+    userDisplay.innerHTML = '';
+    btnLogout.style.display = 'none';
+  }
+}
+
+btnLogout.addEventListener('click', ()=>{
+  if(confirm('Sign out?')) {
+    currentUser = null;
+    localStorage.removeItem('miniPM:user');
+    renderApp();
+  }
+});
+
+// ---------- Main render ----------
+function renderApp(){
+  renderUserControls();
+  if(!currentUser){
+    showLogin();
+    return;
+  }
+  renderBoards();
+}
+
+// ---------- Board / Project UI ----------
+function renderBoards(){
+  mainArea.innerHTML = '';
+
+  const layout = document.createElement('div');
+  layout.className = 'layout';
+
+  // left: boards
+  const left = document.createElement('div');
+  left.style.flex = '1';
+
+  const boardWrap = document.createElement('div');
+  boardWrap.className = 'board-wrap';
+
+  // ensure order
+  if(!state.order) state.order = state.projects.map(p=>p.id);
+  // ensure any projects in list are in order
+  for(const p of state.projects){ if(!state.order.includes(p.id)) state.order.push(p.id); }
+
+  for(const pid of state.order){
+    const p = state.projects.find(x => x.id === pid);
+    if(!p) continue;
+    const col = document.createElement('div');
+    col.className = 'board';
+    col.setAttribute('data-project-id', p.id);
+
+    const header = document.createElement('div');
+    header.style.display='flex';
+    header.style.justifyContent='space-between';
+    header.style.alignItems='center';
+    header.innerHTML = `<div>
+        <h3 style="margin:0">${escapeHtml(p.name)}</h3>
+        <div class="meta">${(p.tasks?.length||0)} tasks • created ${new Date(p.createdAt).toLocaleString()}</div>
+      </div>`;
+
+    const hdrBtns = document.createElement('div');
+    hdrBtns.style.display='flex';
+    hdrBtns.style.gap='6px';
+    const editBtn = document.createElement('button');
+    editBtn.className='ghost';
+    editBtn.textContent='Edit';
+    editBtn.onclick = () => openProjectModal(p.id);
+
+    const addTaskBtn = document.createElement('button');
+    addTaskBtn.textContent = '+ Task';
+    addTaskBtn.onclick = () => createTaskPrompt(p.id);
+
+    hdrBtns.appendChild(editBtn);
+    hdrBtns.appendChild(addTaskBtn);
+    header.appendChild(hdrBtns);
+    col.appendChild(header);
+
+    // list tasks
+    const tasksContainer = document.createElement('div');
+    tasksContainer.style.marginTop = '10px';
+    tasksContainer.style.minHeight = '40px';
+    tasksContainer.className = 'tasksContainer';
+    tasksContainer.ondragover = (ev) => ev.preventDefault();
+    tasksContainer.ondrop = (ev) => {
+      ev.preventDefault();
+      const data = ev.dataTransfer.getData('text/task-id');
+      if(!data) return;
+      moveTaskToProject(data, p.id);
+    };
+
+    const taskIds = p.tasks || [];
+    for(const tid of taskIds){
+      const t = state.tasks[tid];
+      if(!t) continue;
+      const tEl = document.createElement('div');
+      tEl.className = 'task';
+      tEl.setAttribute('draggable','true');
+      tEl.setAttribute('data-task-id', t.id);
+      tEl.ondragstart = (ev) => {
+        ev.dataTransfer.setData('text/task-id', t.id);
+        ev.dataTransfer.effectAllowed = 'move';
+      };
+      tEl.onclick = (ev) => { if(ev.target.tagName !== 'BUTTON') openTaskModal(t.id); };
+      tEl.innerHTML = `<div class="title">${escapeHtml(t.title)}</div>
+        <div class="small">${t.assignee ? '👤 ' + escapeHtml(t.assignee) : 'Unassigned'} • ${t.status}</div>
+        <div class="small" style="color:var(--muted)">${t.due? 'Due: ' + (new Date(t.due)).toLocaleDateString() : ''}</div>`;
+      tasksContainer.appendChild(tEl);
+    }
+
+    col.appendChild(tasksContainer);
+    boardWrap.appendChild(col);
+  }
+
+  left.appendChild(boardWrap);
+
+  layout.appendChild(left);
+
+  // right side: quick actions & help
+  const side = document.createElement('aside');
+  side.className = 'side';
+  side.innerHTML = `
+    <div style="background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)); padding:12px;border-radius:10px">
+      <h3 style="margin:0 0 8px 0">Quick Actions</h3>
+      <div style="display:flex;gap:8px;flex-direction:column">
+        <button id="quickNewProj">Create project</button>
+        <button id="quickSample" class="ghost">Add sample data</button>
+        <button id="exportBtn" class="ghost">Export JSON</button>
+        <button id="importBtn" class="ghost">Import JSON</button>
+      </div>
+    </div>
+    <div style="height:12px"></div>
+    <div style="background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)); padding:12px;border-radius:10px">
+      <h3 style="margin:0 0 8px 0">Help</h3>
+      <div style="font-size:13px;color:var(--muted)">
+        Use the <b>+ Task</b> button to add tasks. Click a task to open details and comments. Drag tasks between projects. Data is saved locally.
+      </div>
+    </div>
+  `;
+  layout.appendChild(side);
+
+  mainArea.appendChild(layout);
+
+  // wire quick buttons
+  document.getElementById('quickNewProj').onclick = () => openProjectModal();
+  document.getElementById('quickSample').onclick = () => addSampleData();
+  document.getElementById('exportBtn').onclick = () => downloadExport();
+  document.getElementById('importBtn').onclick = () => uploadImport();
+}
+
+// ---------- Project Modal ----------
+btnNewProject.addEventListener('click', ()=> openProjectModal());
+
+function openProjectModal(projectId=null){
+  editingProjectId = projectId;
+  projectModalTitle.innerText = projectId ? 'Edit Project' : 'Create Project';
+  if(projectId){
+    const p = state.projects.find(x=>x.id===projectId);
+    projNameInput.value = p.name;
+    projColorInput.value = p.color || '';
+  } else {
+    projNameInput.value = '';
+    projColorInput.value = '';
+  }
+  projectModal.style.display = 'flex';
+}
+projCancel.addEventListener('click', ()=> projectModal.style.display = 'none');
+
+projSave.addEventListener('click', ()=>{
+  const name = projNameInput.value.trim();
+  if(!name){ alert('Project name required'); return; }
+  const color = projColorInput.value.trim();
+  if(editingProjectId){
+    const p = state.projects.find(x=>x.id===editingProjectId);
+    if(!p) return;
+    p.name = name;
+    p.color = color;
+    p.updatedAt = nowISO();
+    showNotification('Project updated');
+  } else {
+    const id = uid('proj');
+    const proj = { id, name, color, createdAt: nowISO(), tasks: [] };
+    state.projects.push(proj);
+    state.order.push(id);
+    showNotification('Project created');
+  }
+  state.meta.updatedAt = nowISO();
+  saveState(state);
+  projectModal.style.display = 'none';
+  renderBoards();
+});
+
+// ---------- Task functions ----------
+function createTaskPrompt(projectId){
+  const title = prompt('Task title:');
+  if(!title) return;
+  const assignee = prompt('Assign to (username) — optional:') || '';
+  const tid = uid('task');
+  const task = {
+    id: tid,
+    title: title,
+    desc: '',
+    assignee: assignee,
+    due: null,
+    status: 'todo',
+    comments: [],
+    createdAt: nowISO(),
+    projectId: projectId
+  };
+  state.tasks[tid] = task;
+  const proj = state.projects.find(p=>p.id===projectId);
+  if(!proj.tasks) proj.tasks = [];
+  proj.tasks.push(tid);
+  state.meta.updatedAt = nowISO();
+  saveState(state);
+  renderBoards();
+  showNotification('Task created: ' + title);
+}
+
+function openTaskModal(taskId){
+  editingTaskId = taskId;
+  const t = state.tasks[taskId];
+  if(!t){ alert('Task not found'); return; }
+
+  taskModalTitle.innerText = t.title ? t.title : 'Task';
+  taskTitleInput.value = t.title;
+  taskDesc.value = t.desc || '';
+  taskAssignee.value = t.assignee || '';
+  taskDue.value = t.due ? (new Date(t.due)).toISOString().slice(0,10) : '';
+  taskStatus.value = t.status || 'todo';
+  taskDelete.style.display = 'inline-block';
+
+  renderComments(t);
+
+  taskModal.style.display = 'flex';
+}
+taskCancel.addEventListener('click', ()=> { taskModal.style.display = 'none'; editingTaskId = null; });
+
+taskSave.addEventListener('click', ()=>{
+  if(!editingTaskId) return;
+  const t = state.tasks[editingTaskId];
+  if(!t) return;
+  const title = taskTitleInput.value.trim();
+  if(!title){ alert('Title required'); return; }
+  t.title = title;
+  t.desc = taskDesc.value;
+  t.assignee = taskAssignee.value.trim();
+  t.due = taskDue.value ? new Date(taskDue.value).toISOString() : null;
+  t.status = taskStatus.value;
+  t.updatedAt = nowISO();
+  saveState(state);
+  renderBoards();
+  taskModal.style.display = 'none';
+  showNotification('Task saved');
+});
+
+taskDelete.addEventListener('click', ()=>{
+  if(!editingTaskId) return;
+  if(!confirm('Delete this task?')) return;
+  const t = state.tasks[editingTaskId];
+  if(!t) return;
+  const proj = state.projects.find(p=>p.id===t.projectId);
+  if(proj && Array.isArray(proj.tasks)){
+    proj.tasks = proj.tasks.filter(x => x !== editingTaskId);
+  }
+  delete state.tasks[editingTaskId];
+  editingTaskId = null;
+  saveState(state);
+  renderBoards();
+  taskModal.style.display = 'none';
+  showNotification('Task deleted');
+});
+
+// Comments
+addCommentBtn.addEventListener('click', ()=>{
+  if(!editingTaskId) return;
+  const text = commentText.value.trim();
+  if(!text){ alert('Comment cannot be empty'); return; }
+  const comment = { id: uid('c'), author: currentUser||'unknown', text, ts: nowISO() };
+  const t = state.tasks[editingTaskId];
+  t.comments = t.comments || [];
+  t.comments.push(comment);
+  saveState(state);
+  renderComments(t);
+  commentText.value = '';
+  renderBoards();
+  showNotification('Comment added');
+});
+
+function renderComments(task){
+  commentsList.innerHTML = '';
+  if(!task.comments || task.comments.length===0){
+    commentsList.innerHTML = '<div style="color:var(--muted)">No comments yet</div>';
+    return;
+  }
+  for(const c of task.comments.slice().reverse()){
+    const el = document.createElement('div');
+    el.style.padding = '8px';
+    el.style.marginBottom = '6px';
+    el.style.background = 'rgba(255,255,255,0.02)';
+    el.style.borderRadius = '8px';
+    el.innerHTML = `<div style="font-weight:700">${escapeHtml(c.author)} <span style="font-weight:400;color:var(--muted);font-size:12px">• ${new Date(c.ts).toLocaleString()}</span></div>
+      <div style="margin-top:6px;color:#dfe6ff">${escapeHtml(c.text)}</div>`;
+    commentsList.appendChild(el);
+  }
+}
+
+// ---------- Move task between projects ----------
+function moveTaskToProject(taskId, targetProjectId){
+  const t = state.tasks[taskId];
+  if(!t) return;
+  const oldProject = state.projects.find(p=>p.id===t.projectId);
+  const newProject = state.projects.find(p=>p.id===targetProjectId);
+  if(!newProject) return;
+  if(oldProject){
+    oldProject.tasks = oldProject.tasks.filter(x=>x!==taskId);
+  }
+  newProject.tasks = newProject.tasks || [];
+  newProject.tasks.push(taskId);
+  t.projectId = targetProjectId;
+  saveState(state);
+  renderBoards();
+  showNotification('Moved "' + t.title + '" to ' + newProject.name);
+}
+
+// ---------- Notifications ----------
+function showNotification(text, ttl=4000){
+  const n = document.createElement('div');
+  n.className = 'notice';
+  n.textContent = text;
+  notifications.insertBefore(n, notifications.firstChild);
+  setTimeout(()=> {
+    n.style.opacity = '0';
+    setTimeout(()=> n.remove(), 400);
+  }, ttl);
+}
+
+// ---------- Helpers ----------
+function escapeHtml(str=''){
+  return String(str)
+    .replaceAll('&','&amp;')
+    .replaceAll('<','&lt;')
+    .replaceAll('>','&gt;')
+    .replaceAll('"','&quot;');
+}
+
+// ---------- Sample data, import/export ----------
+function addSampleData(){
+  const p1 = { id: uid('proj'), name: 'Website', color:'blue', createdAt: nowISO(), tasks: [] };
+  const p2 = { id: uid('proj'), name: 'Mobile App', color:'teal', createdAt: nowISO(), tasks: [] };
+  state.projects.push(p1, p2);
+  state.order.push(p1.id, p2.id);
+
+  const t1id = uid('task');
+  state.tasks[t1id] = {
+    id: t1id, title: 'Design landing page', desc:'Create initial mockups', assignee: currentUser, due:null, status:'todo',
+    comments: [{id:uid('c'),author:currentUser,text:'Let us iterate on header',ts:nowISO()}], createdAt:nowISO(), projectId:p1.id
+  };
+  p1.tasks.push(t1id);
+
+  const t2id = uid('task');
+  state.tasks[t2id] = {
+    id:t2id, title:'Set up CI', desc:'Configure pipeline', assignee:'dev1', due:null, status:'inprogress',
+    comments: [], createdAt:nowISO(), projectId:p1.id
+  };
+  p1.tasks.push(t2id);
+
+  saveState(state);
+  renderBoards();
+  showNotification('Sample data added');
+}
+
+function downloadExport(){
+  const dataStr = JSON.stringify(state, null, 2);
+  const blob = new Blob([dataStr], {type: 'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'miniPM-export.json';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+function uploadImport(){
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.json,application/json';
+  input.onchange = (e) => {
+    const f = e.target.files[0];
+    if(!f) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const imported = JSON.parse(reader.result);
+        if(!imported || typeof imported !== 'object') throw new Error('Invalid JSON');
+        // weak merge: replace current state
+        state = imported;
+        saveState(state);
+        renderBoards();
+        showNotification('Imported JSON');
+      } catch(err){
+        alert('Import failed: ' + err.message);
+      }
+    };
+    reader.readAsText(f);
+  };
+  input.click();
+}
+
+// ---------- small utility to ensure consistent state shape for older data ----------
+(function normalizeState(){
+  if(!state.meta) state.meta = { updatedAt: nowISO() };
+  if(!Array.isArray(state.projects)) state.projects = [];
+  if(!state.tasks || typeof state.tasks !== 'object') state.tasks = {};
+  if(!Array.isArray(state.order)) state.order = state.projects.map(p=>p.id);
+  saveState(state);
+})();
+
+// ---------- Keyboard: Esc to close modals ----------
+document.addEventListener('keydown', (ev) => {
+  if(ev.key === 'Escape'){
+    if(projectModal.style.display === 'flex') projectModal.style.display = 'none';
+    if(taskModal.style.display === 'flex') { taskModal.style.display = 'none'; editingTaskId = null; }
+  }
+});
+
+// ---------- Simple autosave on unload ----------
+window.addEventListener('beforeunload', ()=> saveState(state));
+
+// ---------- Logout on other-tab signout: if user key removed, refresh -->
+window.addEventListener('storage', (ev) => {
+  if(ev.key === 'miniPM:user' && ev.newValue === null){
+    // user logged out in another tab
+    currentUser = null;
+    showLogin();
+  }
+});
+</script>
+</body>
+</html>
